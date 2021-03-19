@@ -22,13 +22,16 @@ public:
                const absl::optional<Grpc::Status::GrpcStatus> grpc_status,
                absl::string_view details));
 
-  void decodeHeaders(RequestHeaderMapPtr&& headers, bool end_stream) override {
-    decodeHeaders_(headers, end_stream);
+  void decodeHeaders(RequestHeaderMapPtr&& headers, bool end_stream,
+                     StatefulHeaderKeyFormatterPtr&& formatter) override {
+    decodeHeaders_(headers, end_stream, std::move(formatter));
   }
   void decodeTrailers(RequestTrailerMapPtr&& trailers) override { decodeTrailers_(trailers); }
 
   // Http::RequestDecoder
-  MOCK_METHOD(void, decodeHeaders_, (RequestHeaderMapPtr & headers, bool end_stream));
+  MOCK_METHOD(void, decodeHeaders_,
+              (RequestHeaderMapPtr & headers, bool end_stream,
+               StatefulHeaderKeyFormatterPtr&& formatter));
   MOCK_METHOD(void, decodeTrailers_, (RequestTrailerMapPtr & trailers));
 };
 
@@ -46,14 +49,17 @@ public:
   void decode100ContinueHeaders(ResponseHeaderMapPtr&& headers) override {
     decode100ContinueHeaders_(headers);
   }
-  void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream) override {
-    decodeHeaders_(headers, end_stream);
+  void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream,
+                     StatefulHeaderKeyFormatterPtr&& formatter) override {
+    decodeHeaders_(headers, end_stream, std::move(formatter));
   }
   void decodeTrailers(ResponseTrailerMapPtr&& trailers) override { decodeTrailers_(trailers); }
 
   // Http::ResponseDecoder
   MOCK_METHOD(void, decode100ContinueHeaders_, (ResponseHeaderMapPtr & headers));
-  MOCK_METHOD(void, decodeHeaders_, (ResponseHeaderMapPtr & headers, bool end_stream));
+  MOCK_METHOD(void, decodeHeaders_,
+              (ResponseHeaderMapPtr & headers, bool end_stream,
+               StatefulHeaderKeyFormatterPtr&& formatter));
   MOCK_METHOD(void, decodeTrailers_, (ResponseTrailerMapPtr & trailers));
   MOCK_METHOD(void, dumpState, (std::ostream&, int), (const));
 };

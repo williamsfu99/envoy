@@ -77,11 +77,10 @@ const std::string StreamEncoderImpl::CRLF = "\r\n";
 // Last chunk as defined here https://tools.ietf.org/html/rfc7230#section-4.1
 const std::string StreamEncoderImpl::LAST_CHUNK = "0\r\n";
 
-StreamEncoderImpl::StreamEncoderImpl(ConnectionImpl& connection,
-                                     HeaderKeyFormatter* header_key_formatter)
+StreamEncoderImpl::StreamEncoderImpl(ConnectionImpl& connection)
     : connection_(connection), disable_chunk_encoding_(false), chunk_encoding_(true),
       connect_request_(false), is_tcp_tunneling_(false), is_response_to_head_request_(false),
-      is_response_to_connect_request_(false), header_key_formatter_(header_key_formatter) {
+      is_response_to_connect_request_(false) {
   if (connection_.connection().aboveHighWatermark()) {
     runHighWatermarkCallbacks();
   }
@@ -102,24 +101,26 @@ void StreamEncoderImpl::encodeHeader(absl::string_view key, absl::string_view va
   this->encodeHeader(key.data(), key.size(), value.data(), value.size());
 }
 
-void StreamEncoderImpl::encodeFormattedHeader(absl::string_view key, absl::string_view value) {
-  if (header_key_formatter_ != nullptr) {
-    encodeHeader(header_key_formatter_->format(key), value);
-  } else {
-    encodeHeader(key, value);
-  }
+void StreamEncoderImpl::encodeFormattedHeader(absl::string_view key, absl::string_view value,
+                                              HeaderKeyFormatterOptConstRef /*formatterfixfix*/) {
+  // if (header_key_formatter_ != nullptr) {
+  //  encodeHeader(header_key_formatter_->format(key), value);
+  //} else {
+  encodeHeader(key, value);
+  // fixfix}
 }
 
 void ResponseEncoderImpl::encode100ContinueHeaders(const ResponseHeaderMap& headers) {
   ASSERT(headers.Status()->value() == "100");
-  encodeHeaders(headers, false);
+  encodeHeaders(headers, false, HeaderKeyFormatterOptConstRef());
 }
 
 void StreamEncoderImpl::encodeHeadersBase(const RequestOrResponseHeaderMap& headers,
                                           absl::optional<uint64_t> status, bool end_stream,
-                                          bool bodiless_request) {
+                                          bool bodiless_request,
+                                          HeaderKeyFormatterOptConstRef formatter) {
   bool saw_content_length = false;
-  headers.iterate([this](const HeaderEntry& header) -> HeaderMap::Iterate {
+  headers.iterate([this, formatter](const HeaderEntry& header) -> HeaderMap::Iterate {
     absl::string_view key_to_use = header.key().getStringView();
     uint32_t key_size_to_use = header.key().size();
     // Translate :authority -> host so that upper layers do not need to deal with this.
@@ -133,7 +134,7 @@ void StreamEncoderImpl::encodeHeadersBase(const RequestOrResponseHeaderMap& head
       return HeaderMap::Iterate::Continue;
     }
 
-    encodeFormattedHeader(key_to_use, header.value().getStringView());
+    encodeFormattedHeader(key_to_use, header.value().getStringView(), formatter);
 
     return HeaderMap::Iterate::Continue;
   });
@@ -172,7 +173,7 @@ void StreamEncoderImpl::encodeHeadersBase(const RequestOrResponseHeaderMap& head
         if (!bodiless_request ||
             !Runtime::runtimeFeatureEnabled(
                 "envoy.reloadable_features.dont_add_content_length_for_bodiless_requests")) {
-          encodeFormattedHeader(Headers::get().ContentLength.get(), "0");
+          encodeFormattedHeader(Headers::get().ContentLength.get(), "0", formatter);
         }
       }
       chunk_encoding_ = false;
@@ -191,7 +192,7 @@ void StreamEncoderImpl::encodeHeadersBase(const RequestOrResponseHeaderMap& head
       // https://tools.ietf.org/html/rfc7231#section-4.3.6.
       if (!is_response_to_connect_request_) {
         encodeFormattedHeader(Headers::get().TransferEncoding.get(),
-                              Headers::get().TransferEncodingValues.Chunked);
+                              Headers::get().TransferEncodingValues.Chunked, formatter);
       }
       // We do not apply chunk encoding for HTTP upgrades, including CONNECT style upgrades.
       // If there is a body in a response on the upgrade path, the chunks will be
@@ -247,7 +248,8 @@ void StreamEncoderImpl::encodeTrailersBase(const HeaderMap& trailers) {
     connection_.buffer().add(LAST_CHUNK);
 
     trailers.iterate([this](const HeaderEntry& header) -> HeaderMap::Iterate {
-      encodeFormattedHeader(header.key().getStringView(), header.value().getStringView());
+      encodeFormattedHeader(header.key().getStringView(), header.value().getStringView(),
+                            HeaderKeyFormatterOptConstRef());
       return HeaderMap::Iterate::Continue;
     });
 
@@ -348,7 +350,8 @@ const Network::Address::InstanceConstSharedPtr& StreamEncoderImpl::connectionLoc
 static const char RESPONSE_PREFIX[] = "HTTP/1.1 ";
 static const char HTTP_10_RESPONSE_PREFIX[] = "HTTP/1.0 ";
 
-void ResponseEncoderImpl::encodeHeaders(const ResponseHeaderMap& headers, bool end_stream) {
+void ResponseEncoderImpl::encodeHeaders(const ResponseHeaderMap& headers, bool end_stream,
+                                        HeaderKeyFormatterOptConstRef formatter) {
   started_response_ = true;
 
   // The contract is that client codecs must ensure that :status is present.
@@ -375,12 +378,14 @@ void ResponseEncoderImpl::encodeHeaders(const ResponseHeaderMap& headers, bool e
     is_response_to_connect_request_ = false;
   }
 
-  encodeHeadersBase(headers, absl::make_optional<uint64_t>(numeric_status), end_stream, false);
+  encodeHeadersBase(headers, absl::make_optional<uint64_t>(numeric_status), end_stream, false,
+                    formatter);
 }
 
 static const char REQUEST_POSTFIX[] = " HTTP/1.1\r\n";
 
-Status RequestEncoderImpl::encodeHeaders(const RequestHeaderMap& headers, bool end_stream) {
+Status RequestEncoderImpl::encodeHeaders(const RequestHeaderMap& headers, bool end_stream,
+                                         HeaderKeyFormatterOptConstRef formatter) {
   // Required headers must be present. This can only happen by some erroneous processing after the
   // downstream codecs decode.
   RETURN_IF_ERROR(HeaderUtility::checkRequiredHeaders(headers));
@@ -411,7 +416,7 @@ Status RequestEncoderImpl::encodeHeaders(const RequestHeaderMap& headers, bool e
   connection_.copyToBuffer(REQUEST_POSTFIX, sizeof(REQUEST_POSTFIX) - 1);
 
   encodeHeadersBase(headers, absl::nullopt, end_stream,
-                    HeaderUtility::requestShouldHaveNoBody(headers));
+                    HeaderUtility::requestShouldHaveNoBody(headers), formatter);
   return okStatus();
 }
 
@@ -1099,7 +1104,7 @@ Envoy::StatusOr<ConnectionImpl::HttpParserCode> ServerConnectionImpl::onHeadersC
     // encoding because end stream with zero body length has not yet been indicated.
     if (parser_.flags & F_CHUNKED ||
         (parser_.content_length > 0 && parser_.content_length != ULLONG_MAX) || handling_upgrade_) {
-      active_request.request_decoder_->decodeHeaders(std::move(headers), false);
+      active_request.request_decoder_->decodeHeaders(std::move(headers), false, nullptr); // fixfix
 
       // If the connection has been closed (or is closing) after decoding headers, pause the parser
       // so we return control to the caller.
@@ -1117,7 +1122,7 @@ Envoy::StatusOr<ConnectionImpl::HttpParserCode> ServerConnectionImpl::onHeadersC
 Status ServerConnectionImpl::onMessageBegin() {
   if (!resetStreamCalled()) {
     ASSERT(!active_request_.has_value());
-    active_request_.emplace(*this, header_key_formatter_.get());
+    active_request_.emplace(*this);
     auto& active_request = active_request_.value();
     if (resetStreamCalled()) {
       return codecClientError("cannot create new streams after calling reset");
@@ -1160,7 +1165,7 @@ void ServerConnectionImpl::onMessageComplete() {
     active_request.remote_complete_ = true;
     if (deferred_end_stream_headers_) {
       active_request.request_decoder_->decodeHeaders(
-          std::move(absl::get<RequestHeaderMapPtr>(headers_or_trailers_)), true);
+          std::move(absl::get<RequestHeaderMapPtr>(headers_or_trailers_)), true, nullptr); // fixfix
       deferred_end_stream_headers_ = false;
     } else if (processing_trailers_) {
       active_request.request_decoder_->decodeTrailers(
@@ -1275,7 +1280,7 @@ RequestEncoder& ClientConnectionImpl::newStream(ResponseDecoder& response_decode
 
   ASSERT(!pending_response_.has_value());
   ASSERT(pending_response_done_);
-  pending_response_.emplace(*this, header_key_formatter_.get(), &response_decoder);
+  pending_response_.emplace(*this, &response_decoder);
   pending_response_done_ = false;
   return pending_response_.value().encoder_;
 }
@@ -1326,7 +1331,8 @@ Envoy::StatusOr<ConnectionImpl::HttpParserCode> ClientConnectionImpl::onHeadersC
     } else if (cannotHaveBody() && !handling_upgrade_) {
       deferred_end_stream_headers_ = true;
     } else {
-      pending_response_.value().decoder_->decodeHeaders(std::move(headers), false);
+      pending_response_.value().decoder_->decodeHeaders(std::move(headers), false,
+                                                        nullptr); // fixfix
     }
 
     // http-parser treats 1xx headers as their own complete response. Swallow the spurious
@@ -1377,7 +1383,8 @@ void ClientConnectionImpl::onMessageComplete() {
 
     if (deferred_end_stream_headers_) {
       response.decoder_->decodeHeaders(
-          std::move(absl::get<ResponseHeaderMapPtr>(headers_or_trailers_)), true);
+          std::move(absl::get<ResponseHeaderMapPtr>(headers_or_trailers_)), true,
+          nullptr); // fixfix
       deferred_end_stream_headers_ = false;
     } else if (processing_trailers_) {
       response.decoder_->decodeTrailers(

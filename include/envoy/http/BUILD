@@ -31,6 +31,7 @@ envoy_cc_library(
     name = "codec_interface",
     hdrs = ["codec.h"],
     deps = [
+        ":header_formatter_interface",
         ":header_map_interface",
         ":metadata_interface",
         ":protocol_interface",
@@ -139,5 +140,13 @@ envoy_cc_library(
     deps = [
         ":header_map_interface",
         "//include/envoy/tracing:trace_reason_interface",
+    ],
+)
+
+envoy_cc_library(
+    name = "header_formatter_interface",
+    hdrs = ["header_formatter.h"],
+    deps = [
+        "//include/envoy/config:typed_config_interface",
     ],
 )

@@ -115,7 +115,8 @@ void UpstreamRequest::decode100ContinueHeaders(Http::ResponseHeaderMapPtr&& head
   parent_.onUpstream100ContinueHeaders(std::move(headers), *this);
 }
 
-void UpstreamRequest::decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream) {
+void UpstreamRequest::decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream,
+                                    Http::StatefulHeaderKeyFormatterPtr&& /*formatterfixfix*/) {
   ScopeTrackerScopeState scope(&parent_.callbacks()->scope(), parent_.callbacks()->dispatcher());
 
   // We drop 1xx other than 101 on the floor; 101 upgrade headers need to be passed to the client as

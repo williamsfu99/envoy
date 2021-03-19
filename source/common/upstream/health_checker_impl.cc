@@ -232,7 +232,7 @@ void HttpHealthCheckerImpl::HttpActiveHealthCheckSession::onDeferredDelete() {
 }
 
 void HttpHealthCheckerImpl::HttpActiveHealthCheckSession::decodeHeaders(
-    Http::ResponseHeaderMapPtr&& headers, bool end_stream) {
+    Http::ResponseHeaderMapPtr&& headers, bool end_stream, Http::StatefulHeaderKeyFormatterPtr&&) {
   ASSERT(!response_headers_);
   response_headers_ = std::move(headers);
   if (end_stream) {
@@ -283,7 +283,8 @@ void HttpHealthCheckerImpl::HttpActiveHealthCheckSession::onInterval() {
                                          local_address_provider_);
   stream_info.onUpstreamHostSelected(host_);
   parent_.request_headers_parser_->evaluateHeaders(*request_headers, stream_info);
-  auto status = request_encoder->encodeHeaders(*request_headers, true);
+  auto status =
+      request_encoder->encodeHeaders(*request_headers, true, Http::HeaderKeyFormatterOptConstRef());
   // Encoding will only fail if required request headers are missing.
   ASSERT(status.ok());
 }
@@ -611,7 +612,7 @@ void GrpcHealthCheckerImpl::GrpcActiveHealthCheckSession::onDeferredDelete() {
 }
 
 void GrpcHealthCheckerImpl::GrpcActiveHealthCheckSession::decodeHeaders(
-    Http::ResponseHeaderMapPtr&& headers, bool end_stream) {
+    Http::ResponseHeaderMapPtr&& headers, bool end_stream, Http::StatefulHeaderKeyFormatterPtr&&) {
   const auto http_response_status = Http::Utility::getResponseStatus(*headers);
   if (http_response_status != enumToInt(Http::Code::OK)) {
     // https://github.com/grpc/grpc/blob/master/doc/http-grpc-status-mapping.md requires that
@@ -730,7 +731,8 @@ void GrpcHealthCheckerImpl::GrpcActiveHealthCheckSession::onInterval() {
       host_->transportSocketFactory().implementsSecureTransport(),
       host_->transportSocketFactory().implementsSecureTransport());
 
-  auto status = request_encoder_->encodeHeaders(headers_message->headers(), false);
+  auto status = request_encoder_->encodeHeaders(headers_message->headers(), false,
+                                                Http::HeaderKeyFormatterOptConstRef());
   // Encoding will only fail if required headers are missing.
   ASSERT(status.ok());
 

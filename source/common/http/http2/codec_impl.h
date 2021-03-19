@@ -376,7 +376,8 @@ protected:
     }
 
     // RequestEncoder
-    Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream) override;
+    Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream,
+                         HeaderKeyFormatterOptConstRef formatter) override;
     void encodeTrailers(const RequestTrailerMap& trailers) override {
       encodeTrailersBase(trailers);
     }
@@ -422,7 +423,8 @@ protected:
 
     // ResponseEncoder
     void encode100ContinueHeaders(const ResponseHeaderMap& headers) override;
-    void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream) override;
+    void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream,
+                       HeaderKeyFormatterOptConstRef formatter) override;
     void encodeTrailers(const ResponseTrailerMap& trailers) override {
       encodeTrailersBase(trailers);
     }

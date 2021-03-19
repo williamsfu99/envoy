@@ -76,9 +76,10 @@ public:
   void clearReadDisableCallsForTests() { read_disable_calls_ = 0; }
 
 protected:
-  StreamEncoderImpl(ConnectionImpl& connection, HeaderKeyFormatter* header_key_formatter);
+  StreamEncoderImpl(ConnectionImpl& connection);
   void encodeHeadersBase(const RequestOrResponseHeaderMap& headers, absl::optional<uint64_t> status,
-                         bool end_stream, bool bodiless_request);
+                         bool end_stream, bool bodiless_request,
+                         HeaderKeyFormatterOptConstRef formatter);
   void encodeTrailersBase(const HeaderMap& headers);
 
   static const std::string CRLF;
@@ -115,9 +116,9 @@ private:
    */
   void endEncode();
 
-  void encodeFormattedHeader(absl::string_view key, absl::string_view value);
+  void encodeFormattedHeader(absl::string_view key, absl::string_view value,
+                             HeaderKeyFormatterOptConstRef formatter);
 
-  const HeaderKeyFormatter* const header_key_formatter_;
   absl::string_view details_;
 };
 
@@ -126,16 +127,16 @@ private:
  */
 class ResponseEncoderImpl : public StreamEncoderImpl, public ResponseEncoder {
 public:
-  ResponseEncoderImpl(ConnectionImpl& connection, HeaderKeyFormatter* header_key_formatter,
-                      bool stream_error_on_invalid_http_message)
-      : StreamEncoderImpl(connection, header_key_formatter),
+  ResponseEncoderImpl(ConnectionImpl& connection, bool stream_error_on_invalid_http_message)
+      : StreamEncoderImpl(connection),
         stream_error_on_invalid_http_message_(stream_error_on_invalid_http_message) {}
 
   bool startedResponse() { return started_response_; }
 
   // Http::ResponseEncoder
   void encode100ContinueHeaders(const ResponseHeaderMap& headers) override;
-  void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream) override;
+  void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream,
+                     HeaderKeyFormatterOptConstRef formatter) override;
   void encodeTrailers(const ResponseTrailerMap& trailers) override { encodeTrailersBase(trailers); }
 
   bool streamErrorOnInvalidHttpMessage() const override {
@@ -152,14 +153,14 @@ private:
  */
 class RequestEncoderImpl : public StreamEncoderImpl, public RequestEncoder {
 public:
-  RequestEncoderImpl(ConnectionImpl& connection, HeaderKeyFormatter* header_key_formatter)
-      : StreamEncoderImpl(connection, header_key_formatter) {}
+  RequestEncoderImpl(ConnectionImpl& connection) : StreamEncoderImpl(connection) {}
   bool upgradeRequest() const { return upgrade_request_; }
   bool headRequest() const { return head_request_; }
   bool connectRequest() const { return connect_request_; }
 
   // Http::RequestEncoder
-  Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream) override;
+  Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream,
+                       HeaderKeyFormatterOptConstRef formatter) override;
   void encodeTrailers(const RequestTrailerMap& trailers) override { encodeTrailersBase(trailers); }
   void enableTcpTunneling() override { is_tcp_tunneling_ = true; }
 
@@ -496,8 +497,8 @@ protected:
    * An active HTTP/1.1 request.
    */
   struct ActiveRequest {
-    ActiveRequest(ServerConnectionImpl& connection, HeaderKeyFormatter* header_key_formatter)
-        : response_encoder_(connection, header_key_formatter,
+    ActiveRequest(ServerConnectionImpl& connection)
+        : response_encoder_(connection,
                             connection.codec_settings_.stream_error_on_invalid_http_message_) {}
 
     HeaderString request_url_;
@@ -595,9 +596,8 @@ public:
 
 private:
   struct PendingResponse {
-    PendingResponse(ConnectionImpl& connection, HeaderKeyFormatter* header_key_formatter,
-                    ResponseDecoder* decoder)
-        : encoder_(connection, header_key_formatter), decoder_(decoder) {}
+    PendingResponse(ConnectionImpl& connection, ResponseDecoder* decoder)
+        : encoder_(connection), decoder_(decoder) {}
 
     RequestEncoderImpl encoder_;
     ResponseDecoder* decoder_;

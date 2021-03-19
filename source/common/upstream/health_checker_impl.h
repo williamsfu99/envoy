@@ -97,7 +97,8 @@ private:
 
     // Http::ResponseDecoder
     void decode100ContinueHeaders(Http::ResponseHeaderMapPtr&&) override {}
-    void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream) override;
+    void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream,
+                       Http::StatefulHeaderKeyFormatterPtr&& formatter) override;
     void decodeTrailers(Http::ResponseTrailerMapPtr&&) override { onResponseComplete(); }
     void dumpState(std::ostream& os, int indent_level) const override {
       DUMP_STATE_UNIMPLEMENTED(HttpActiveHealthCheckSession);
@@ -334,7 +335,8 @@ private:
 
     // Http::ResponseDecoder
     void decode100ContinueHeaders(Http::ResponseHeaderMapPtr&&) override {}
-    void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream) override;
+    void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream,
+                       Http::StatefulHeaderKeyFormatterPtr&& formatter) override;
     void decodeTrailers(Http::ResponseTrailerMapPtr&&) override;
     void dumpState(std::ostream& os, int indent_level) const override {
       DUMP_STATE_UNIMPLEMENTED(GrpcActiveHealthCheckSession);

@@ -7,6 +7,7 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/common/pure.h"
 #include "envoy/grpc/status.h"
+#include "envoy/http/header_formatter.h"
 #include "envoy/http/header_map.h"
 #include "envoy/http/metadata_interface.h"
 #include "envoy/http/protocol.h"
@@ -107,10 +108,12 @@ public:
    * Encode headers, optionally indicating end of stream.
    * @param headers supplies the header map to encode. Must have required HTTP headers.
    * @param end_stream supplies whether this is a header only request.
+   * fixfix
    * @return Status indicating whether encoding succeeded. Encoding will fail if request
    * headers are missing required HTTP headers (method, path for non-CONNECT, host for CONNECT).
    */
-  virtual Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream) PURE;
+  virtual Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream,
+                               HeaderKeyFormatterOptConstRef formatter) PURE;
 
   /**
    * Encode trailers. This implicitly ends the stream.
@@ -141,8 +144,10 @@ public:
    * have a valid :status set.
    * @param headers supplies the header map to encode.
    * @param end_stream supplies whether this is a header only response.
+   * fixfix
    */
-  virtual void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream) PURE;
+  virtual void encodeHeaders(const ResponseHeaderMap& headers, bool end_stream,
+                             HeaderKeyFormatterOptConstRef formatter) PURE;
 
   /**
    * Encode trailers. This implicitly ends the stream.
@@ -191,8 +196,10 @@ public:
    * Called with decoded headers, optionally indicating end of stream.
    * @param headers supplies the decoded headers map.
    * @param end_stream supplies whether this is a header only request.
+   * fixfix
    */
-  virtual void decodeHeaders(RequestHeaderMapPtr&& headers, bool end_stream) PURE;
+  virtual void decodeHeaders(RequestHeaderMapPtr&& headers, bool end_stream,
+                             StatefulHeaderKeyFormatterPtr&& formatter) PURE;
 
   /**
    * Called with a decoded trailers frame. This implicitly ends the stream.
@@ -231,8 +238,10 @@ public:
    * Called with decoded headers, optionally indicating end of stream.
    * @param headers supplies the decoded headers map.
    * @param end_stream supplies whether this is a header only response.
+   * fixfix
    */
-  virtual void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream) PURE;
+  virtual void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream,
+                             StatefulHeaderKeyFormatterPtr&& formatter) PURE;
 
   /**
    * Called with a decoded trailers frame. This implicitly ends the stream.

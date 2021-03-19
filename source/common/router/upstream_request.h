@@ -56,7 +56,8 @@ public:
 
   // UpstreamToDownstream (Http::ResponseDecoder)
   void decode100ContinueHeaders(Http::ResponseHeaderMapPtr&& headers) override;
-  void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream) override;
+  void decodeHeaders(Http::ResponseHeaderMapPtr&& headers, bool end_stream,
+                     Http::StatefulHeaderKeyFormatterPtr&& formatter) override;
   void decodeTrailers(Http::ResponseTrailerMapPtr&& trailers) override;
   void dumpState(std::ostream& os, int indent_level) const override;
 

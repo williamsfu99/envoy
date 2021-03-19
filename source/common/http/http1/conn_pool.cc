@@ -38,13 +38,14 @@ ActiveClient::StreamWrapper::~StreamWrapper() {
 
 void ActiveClient::StreamWrapper::onEncodeComplete() { encode_complete_ = true; }
 
-void ActiveClient::StreamWrapper::decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream) {
+void ActiveClient::StreamWrapper::decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream,
+                                                StatefulHeaderKeyFormatterPtr&& formatter) {
   close_connection_ =
       HeaderUtility::shouldCloseConnection(parent_.codec_client_->protocol(), *headers);
   if (close_connection_) {
     parent_.parent().host()->cluster().stats().upstream_cx_close_notify_.inc();
   }
-  ResponseDecoderWrapper::decodeHeaders(std::move(headers), end_stream);
+  ResponseDecoderWrapper::decodeHeaders(std::move(headers), end_stream, std::move(formatter));
 }
 
 void ActiveClient::StreamWrapper::onDecodeComplete() {

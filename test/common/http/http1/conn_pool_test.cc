@@ -203,7 +203,7 @@ struct ActiveTestRequest {
     Http::ResponseHeaderMapPtr response_headers(
         new TestResponseHeaderMapImpl{{":status", "200"}, {"x-envoy-upstream-canary", "true"}});
 
-    inner_decoder_->decodeHeaders(std::move(response_headers), !with_body);
+    inner_decoder_->decodeHeaders(std::move(response_headers), !with_body, nullptr);
     if (with_body) {
       Buffer::OwnedImpl data;
       inner_decoder_->decodeData(data, true);
@@ -217,10 +217,10 @@ struct ActiveTestRequest {
   }
 
   void startRequest() {
-    EXPECT_TRUE(
-        callbacks_.outer_encoder_
-            ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-            .ok());
+    EXPECT_TRUE(callbacks_.outer_encoder_
+                    ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                    true, HeaderKeyFormatterOptConstRef())
+                    .ok());
   }
 
   Http1ConnPoolImplTest& parent_;
@@ -656,23 +656,23 @@ TEST_F(Http1ConnPoolImplTest, MaxConnections) {
       .WillOnce(DoAll(SaveArgAddress(&inner_decoder), ReturnRef(request_encoder)));
   EXPECT_CALL(callbacks2.pool_ready_, ready());
 
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
   Http::ResponseHeaderMapPtr response_headers(new TestResponseHeaderMapImpl{{":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
 
   conn_pool_->expectAndRunUpstreamReady();
   conn_pool_->expectEnableUpstreamReady();
-  EXPECT_TRUE(
-      callbacks2.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks2.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
   // N.B. clang_tidy insists that we use std::make_unique which can not infer std::initialize_list.
   response_headers = std::make_unique<TestResponseHeaderMapImpl>(
       std::initializer_list<std::pair<std::string, std::string>>{{":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
 
   // Cause the connection to go away.
   EXPECT_CALL(*conn_pool_, onClientDestroy());
@@ -714,12 +714,12 @@ TEST_F(Http1ConnPoolImplTest, ConnectionCloseWithoutHeader) {
 
   // Finishing request 1 will schedule binding the connection to request 2.
   conn_pool_->expectEnableUpstreamReady();
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
   Http::ResponseHeaderMapPtr response_headers(new TestResponseHeaderMapImpl{{":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
 
   // Cause the connection to go away.
   conn_pool_->expectClientCreate();
@@ -735,14 +735,14 @@ TEST_F(Http1ConnPoolImplTest, ConnectionCloseWithoutHeader) {
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
 
   conn_pool_->expectEnableUpstreamReady();
-  EXPECT_TRUE(
-      callbacks2.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks2.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
   // N.B. clang_tidy insists that we use std::make_unique which can not infer std::initialize_list.
   response_headers = std::make_unique<TestResponseHeaderMapImpl>(
       std::initializer_list<std::pair<std::string, std::string>>{{":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
 
   EXPECT_CALL(*conn_pool_, onClientDestroy());
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::RemoteClose);
@@ -770,16 +770,16 @@ TEST_F(Http1ConnPoolImplTest, ConnectionCloseHeader) {
   EXPECT_CALL(callbacks.pool_ready_, ready());
 
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   // Response with 'connection: close' which should cause the connection to go away.
   EXPECT_CALL(*conn_pool_, onClientDestroy());
   ResponseHeaderMapPtr response_headers(
       new TestResponseHeaderMapImpl{{":status", "200"}, {"Connection", "Close"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
   dispatcher_.clearDeferredDeleteList();
 
   EXPECT_EQ(0U, cluster_->stats_.upstream_cx_destroy_with_active_rq_.value());
@@ -806,17 +806,17 @@ TEST_F(Http1ConnPoolImplTest, ProxyConnectionCloseHeader) {
   EXPECT_CALL(callbacks.pool_ready_, ready());
 
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   EXPECT_CALL(*conn_pool_, onClientDestroy());
   // Response with 'proxy-connection: close' which should cause the connection to go away, even if
   // there are other tokens in that header.
   ResponseHeaderMapPtr response_headers(
       new TestResponseHeaderMapImpl{{":status", "200"}, {"Proxy-Connection", "Close, foo"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
   dispatcher_.clearDeferredDeleteList();
 
   EXPECT_EQ(0U, cluster_->stats_.upstream_cx_destroy_with_active_rq_.value());
@@ -843,16 +843,16 @@ TEST_F(Http1ConnPoolImplTest, Http10NoConnectionKeepAlive) {
   EXPECT_CALL(callbacks.pool_ready_, ready());
 
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   // Response without 'connection: keep-alive' which should cause the connection to go away.
   EXPECT_CALL(*conn_pool_, onClientDestroy());
   ResponseHeaderMapPtr response_headers(
       new TestResponseHeaderMapImpl{{":protocol", "HTTP/1.0"}, {":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
   dispatcher_.clearDeferredDeleteList();
 
   EXPECT_EQ(0U, cluster_->stats_.upstream_cx_destroy_with_active_rq_.value());
@@ -882,15 +882,15 @@ TEST_F(Http1ConnPoolImplTest, MaxRequestsPerConnection) {
 
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
   conn_pool_->expectEnableUpstreamReady();
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   // Response with 'connection: close' which should cause the connection to go away.
   EXPECT_CALL(*conn_pool_, onClientDestroy());
   Http::ResponseHeaderMapPtr response_headers(new TestResponseHeaderMapImpl{{":status", "200"}});
-  inner_decoder->decodeHeaders(std::move(response_headers), true);
+  inner_decoder->decodeHeaders(std::move(response_headers), true, nullptr);
   dispatcher_.clearDeferredDeleteList();
 
   EXPECT_EQ(0U, cluster_->stats_.upstream_cx_destroy_with_active_rq_.value());
@@ -993,13 +993,13 @@ TEST_F(Http1ConnPoolImplTest, RemoteCloseToCompleteResponse) {
   EXPECT_CALL(callbacks.pool_ready_, ready());
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
 
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   inner_decoder->decodeHeaders(
-      ResponseHeaderMapPtr{new TestResponseHeaderMapImpl{{":status", "200"}}}, false);
+      ResponseHeaderMapPtr{new TestResponseHeaderMapImpl{{":status", "200"}}}, false, nullptr);
   Buffer::OwnedImpl dummy_data("12345");
   inner_decoder->decodeData(dummy_data, false);
 
@@ -1119,15 +1119,15 @@ TEST_F(Http1ConnPoolDestructImplTest, CbAfterConnPoolDestroyed) {
   EXPECT_CALL(callbacks.pool_ready_, ready());
   conn_pool_->test_clients_[0].connection_->raiseEvent(Network::ConnectionEvent::Connected);
 
-  EXPECT_TRUE(
-      callbacks.outer_encoder_
-          ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}}, true)
-          .ok());
+  EXPECT_TRUE(callbacks.outer_encoder_
+                  ->encodeHeaders(TestRequestHeaderMapImpl{{":path", "/"}, {":method", "GET"}},
+                                  true, HeaderKeyFormatterOptConstRef())
+                  .ok());
 
   conn_pool_->expectEnableUpstreamReady();
   // Schedules the onUpstreamReady callback.
   inner_decoder->decodeHeaders(
-      ResponseHeaderMapPtr{new TestResponseHeaderMapImpl{{":status", "200"}}}, true);
+      ResponseHeaderMapPtr{new TestResponseHeaderMapImpl{{":status", "200"}}}, true, nullptr);
 
   // Delete the connection pool.
   EXPECT_CALL(*conn_pool_, onClientDestroy());

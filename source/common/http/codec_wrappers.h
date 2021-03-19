@@ -15,12 +15,13 @@ public:
     inner_.decode100ContinueHeaders(std::move(headers));
   }
 
-  void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream) override {
+  void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream,
+                     StatefulHeaderKeyFormatterPtr&& formatter) override {
     if (end_stream) {
       onPreDecodeComplete();
     }
 
-    inner_.decodeHeaders(std::move(headers), end_stream);
+    inner_.decodeHeaders(std::move(headers), end_stream, std::move(formatter));
 
     if (end_stream) {
       onDecodeComplete();
@@ -72,8 +73,9 @@ protected:
 class RequestEncoderWrapper : public RequestEncoder {
 public:
   // RequestEncoder
-  Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream) override {
-    RETURN_IF_ERROR(inner_.encodeHeaders(headers, end_stream));
+  Status encodeHeaders(const RequestHeaderMap& headers, bool end_stream,
+                       HeaderKeyFormatterOptConstRef formatter) override {
+    RETURN_IF_ERROR(inner_.encodeHeaders(headers, end_stream, formatter));
     if (end_stream) {
       onEncodeComplete();
     }

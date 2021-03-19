@@ -42,7 +42,8 @@ public:
     void onEncodeComplete() override;
 
     // StreamDecoderWrapper
-    void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream) override;
+    void decodeHeaders(ResponseHeaderMapPtr&& headers, bool end_stream,
+                       StatefulHeaderKeyFormatterPtr&& formatter) override;
     void onPreDecodeComplete() override {}
     void onDecodeComplete() override;
 

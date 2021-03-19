@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package envoy.config.core.v3;
 
+import "envoy/config/core/v3/extension.proto";
 import "envoy/type/v3/percent.proto";
 
 import "google/protobuf/duration.proto";
@@ -136,6 +137,9 @@ message Http1ProtocolOptions {
       // Note that while this results in most headers following conventional casing, certain headers
       // are not covered. For example, the "TE" header will be formatted as "Te".
       ProperCaseWords proper_case_words = 1;
+
+      // fixfix
+      core.v3.TypedExtensionConfig stateful_formatter = 9;
     }
   }
 
